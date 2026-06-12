@@ -4,3 +4,4 @@ pywin32>=306
 opencv-python>=4.13
 rapidocr-onnxruntime>=1.4
 paddleocr>=3.6
+openai>=1.66.0

@@ -15,6 +15,19 @@ from api_split_image_layers import (
     write_layer,
 )
 from graph_text_pipeline import run_pipeline as run_graph_text_pipeline
+from gpt_relayout_svg import (
+    DEFAULT_BASE_URL as DEFAULT_RELAYOUT_BASE_URL,
+    DEFAULT_MODEL as DEFAULT_RELAYOUT_MODEL,
+    DEFAULT_OUTPUT_NAME as DEFAULT_RELAYOUT_OUTPUT_NAME,
+    DEFAULT_RAW_RESPONSE_NAME as DEFAULT_RELAYOUT_RAW_RESPONSE_NAME,
+    DEFAULT_REASONING_EFFORT as DEFAULT_RELAYOUT_REASONING_EFFORT,
+    INSTRUCTIONS as RELAYOUT_INSTRUCTIONS,
+    REASONING_EFFORTS,
+    USER_PROMPT as RELAYOUT_PROMPT,
+    first_env,
+    normalize_base_url,
+    relayout_svg,
+)
 from trace_to_svg import TRACE_PRESETS
 
 
@@ -140,6 +153,44 @@ def build_svg(paths: dict[str, Path], args: argparse.Namespace) -> Path:
     return run_graph_text_pipeline(build_svg_args(paths, args))
 
 
+def build_relayout_args(source_image: Path, paths: dict[str, Path], args: argparse.Namespace) -> argparse.Namespace:
+    return argparse.Namespace(
+        png=source_image,
+        svg=paths["out_svg"],
+        output_dir=paths["out_dir"],
+        output_name=args.relayout_output_name,
+        raw_response_name=args.relayout_raw_response_name,
+        prompt=read_prompt(args.relayout_prompt_file, RELAYOUT_PROMPT),
+        instructions=read_prompt(args.relayout_instructions_file, RELAYOUT_INSTRUCTIONS),
+        api_key=args.relayout_api_key,
+        base_url=normalize_base_url(args.relayout_base_url),
+        model=args.relayout_model,
+        reasoning_effort=args.relayout_reasoning_effort,
+        max_output_tokens=args.relayout_max_output_tokens,
+        timeout=args.relayout_timeout,
+        retries=args.relayout_retries,
+        retry_delay=args.relayout_retry_delay,
+        debug=args.debug_relayout,
+        dry_run=args.relayout_dry_run,
+    )
+
+
+def relayout_with_gpt(source_image: Path, paths: dict[str, Path], args: argparse.Namespace) -> Path:
+    if not paths["out_svg"].is_file():
+        raise FileNotFoundError(f"Missing SVG for relayout: {paths['out_svg']}")
+
+    output_path = paths["out_dir"] / args.relayout_output_name
+    if output_path.is_file() and not args.force_relayout and not args.relayout_dry_run:
+        print(f"Reusing GPT relayout SVG: {output_path}")
+        return output_path
+
+    if not args.relayout_api_key and not args.relayout_dry_run:
+        raise RuntimeError("Relayout API key missing. Set GPT_SVG_API_KEY, OPENAI_API_KEY, APIYI_API_KEY, or pass --relayout-api-key.")
+
+    print("Running GPT SVG relayout...")
+    return relayout_svg(build_relayout_args(source_image, paths, args))
+
+
 def process_image(source_image: Path, args: argparse.Namespace) -> Path | None:
     paths = output_paths(source_image, args.output_dir.resolve())
     ensure_dirs(paths)
@@ -150,20 +201,24 @@ def process_image(source_image: Path, args: argparse.Namespace) -> Path | None:
     if args.stage in {"all", "split"}:
         split_with_gpt(source_image, paths, args)
 
+    result: Path | None = None
     if args.stage in {"all", "svg"}:
-        return build_svg(paths, args)
+        result = build_svg(paths, args)
 
-    return None
+    if args.stage == "relayout" or (args.stage == "all" and not args.skip_relayout):
+        result = relayout_with_gpt(source_image, paths, args)
+
+    return result
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Batch pipeline: input image -> GPT text/graph layer images -> merged SVG."
+        description="Batch pipeline: input image -> GPT text/graph layer images -> merged SVG -> GPT relayout SVG."
     )
     parser.add_argument("-i", "--input", type=Path, default=None, help="Process one input image.")
     parser.add_argument("--input-dir", type=Path, default=DEFAULT_INPUT_DIR, help="Directory of input images.")
     parser.add_argument("-o", "--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Root output directory.")
-    parser.add_argument("--stage", choices=["all", "split", "svg"], default="all")
+    parser.add_argument("--stage", choices=["all", "split", "svg", "relayout"], default="all")
     parser.add_argument("--force-api", action="store_true", help="Regenerate text/graph layer PNGs even if they already exist.")
     parser.add_argument("--only-layer", choices=["both", "text", "graph"], default="both")
 
@@ -199,6 +254,35 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bg-delta", type=float, default=5.0)
     parser.add_argument("--white-l-threshold", type=float, default=94.0)
     parser.add_argument("--min-component-area", type=int, default=5)
+
+    default_relayout_base_url = normalize_base_url(
+        first_env("GPT_SVG_BASE_URL", "OPENAI_BASE_URL", "APIYI_BASE_URL", "IMAGE_MODEL_gpt2_BASE_URL")
+        or DEFAULT_RELAYOUT_BASE_URL
+    )
+    parser.add_argument("--skip-relayout", action="store_true", help="Do not run the final GPT SVG relayout step when --stage all is used.")
+    parser.add_argument("--force-relayout", action="store_true", help="Regenerate gpt_layout.svg even if it already exists.")
+    parser.add_argument("--relayout-output-name", default=DEFAULT_RELAYOUT_OUTPUT_NAME)
+    parser.add_argument("--relayout-raw-response-name", default=DEFAULT_RELAYOUT_RAW_RESPONSE_NAME)
+    parser.add_argument("--relayout-prompt-file", type=Path, default=None)
+    parser.add_argument("--relayout-instructions-file", type=Path, default=None)
+    parser.add_argument(
+        "--relayout-api-key",
+        default=first_env("GPT_SVG_API_KEY", "OPENAI_API_KEY", "APIYI_API_KEY", "IMAGE_MODEL_gpt2_API_KEY"),
+    )
+    parser.add_argument("--relayout-base-url", default=default_relayout_base_url)
+    parser.add_argument("--relayout-model", default=first_env("GPT_SVG_MODEL", "OPENAI_MODEL") or DEFAULT_RELAYOUT_MODEL)
+    parser.add_argument(
+        "--relayout-reasoning-effort",
+        choices=REASONING_EFFORTS,
+        default=first_env("GPT_SVG_REASONING_EFFORT") or DEFAULT_RELAYOUT_REASONING_EFFORT,
+        help="Reasoning effort for final GPT SVG relayout. Default is xhigh.",
+    )
+    parser.add_argument("--relayout-max-output-tokens", type=int, default=32768)
+    parser.add_argument("--relayout-timeout", type=float, default=600)
+    parser.add_argument("--relayout-retries", type=int, default=5)
+    parser.add_argument("--relayout-retry-delay", type=float, default=5.0)
+    parser.add_argument("--relayout-dry-run", action="store_true", help="Validate relayout inputs without calling the Responses API.")
+    parser.add_argument("--debug", "--debug-relayout", dest="debug_relayout", action="store_true", help="Print detailed relayout API errors.")
     return parser
 
 

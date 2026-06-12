@@ -29,3 +29,4 @@ build/
 
 # Logs
 .log
+.env
