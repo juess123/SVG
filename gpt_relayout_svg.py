@@ -16,11 +16,11 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_PNG = SCRIPT_DIR / "input" / "image13.png"
 DEFAULT_SVG = SCRIPT_DIR / "output" / "image13" / "out" / "out.svg"
 DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "output" / "image13" / "out"
-DEFAULT_OUTPUT_NAME = "gpt_layout.svg"
+DEFAULT_OUTPUT_NAME = "layout.svg"
 DEFAULT_RAW_RESPONSE_NAME = "gpt_layout_response.txt"
 DEFAULT_BASE_URL = "https://api.apiyi.com/v1"
 DEFAULT_MODEL = "gpt-5.5"
-DEFAULT_REASONING_EFFORT = "xhigh"
+DEFAULT_REASONING_EFFORT = "high"
 REASONING_EFFORTS = ("default", "none", "minimal", "low", "medium", "high", "xhigh")
 
 USER_PROMPT = """The first input is a PNG reference image that shows the desired final result.

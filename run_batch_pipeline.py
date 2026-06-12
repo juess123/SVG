@@ -285,7 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
         or DEFAULT_RELAYOUT_BASE_URL
     )
     parser.add_argument("--skip-relayout", action="store_true", help="Do not run the final GPT SVG relayout step when --stage all is used.")
-    parser.add_argument("--force-relayout", action="store_true", help="Regenerate gpt_layout.svg even if it already exists.")
+    parser.add_argument("--force-relayout", action="store_true", help="Regenerate layout.svg even if it already exists.")
     parser.add_argument("--relayout-output-name", default=DEFAULT_RELAYOUT_OUTPUT_NAME)
     parser.add_argument("--relayout-raw-response-name", default=DEFAULT_RELAYOUT_RAW_RESPONSE_NAME)
     parser.add_argument("--relayout-prompt-file", type=Path, default=None)

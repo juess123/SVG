@@ -22,6 +22,7 @@ from pydantic import BaseModel
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_NOTIFY_URL = "http://192.168.2.104/imageWorkflow/notify"
 DEFAULT_OUTPUT_COS_PREFIX = "svg-output"
+FINAL_SVG_NAME = "layout.svg"
 DEFAULT_STATUS_PATH = SCRIPT_DIR / "workflow_jobs.json"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 
@@ -196,7 +197,7 @@ def run_pipeline_for_image(image_path: Path) -> Path:
     if completed.returncode != 0:
         raise RuntimeError(f"Pipeline failed with exit code {completed.returncode}")
 
-    output_path = SCRIPT_DIR / "output" / image_path.stem / "out" / "gpt_layout.svg"
+    output_path = SCRIPT_DIR / "output" / image_path.stem / "out" / FINAL_SVG_NAME
     if not output_path.is_file():
         raise FileNotFoundError(f"Final SVG not found: {output_path}")
     return output_path
@@ -210,7 +211,7 @@ def process_job(order_id: str, image_cos_key: str, image_path: Path) -> None:
         svg_path = run_pipeline_for_image(image_path)
 
         output_prefix = normalize_cos_key(os.environ.get("SVG_OUTPUT_COS_PREFIX", DEFAULT_OUTPUT_COS_PREFIX))
-        svg_cos_key = f"{output_prefix}/{safe_name(order_id)}/gpt_layout.svg"
+        svg_cos_key = f"{output_prefix}/{safe_name(order_id)}/{FINAL_SVG_NAME}"
         storage = CosStorage()
         storage.upload_file(svg_path, svg_cos_key)
 
