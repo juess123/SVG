@@ -609,6 +609,7 @@ def write_svg(
     *,
     match_fonts: bool = True,
     font_dirs: list[Path] | None = None,
+    print_items: bool = False,
 ) -> Path:
     width, height, items = ocr_to_items(input_path, min_score, match_fonts=match_fonts, font_dirs=font_dirs)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -624,8 +625,9 @@ def write_svg(
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print(f"Recognized {len(items)} text component(s)")
-    for item in items:
-        print(f"{item.text}\t{item.fill}\t{item.score:.3f}\t{item.font_family}")
+    if print_items:
+        for item in items:
+            print(f"{item.text}\t{item.fill}\t{item.score:.3f}\t{item.font_family}")
     return output_path
 
 
@@ -643,6 +645,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory to scan for font matching. Can be used multiple times. Default: Windows fonts + data/fonts.",
     )
     parser.add_argument("--no-font-match", action="store_true", help="Use heuristic font families without image matching.")
+    parser.add_argument("--print-items", action="store_true", help="Print every recognized OCR text item.")
     return parser
 
 
@@ -658,6 +661,7 @@ def main() -> int:
             args.background,
             match_fonts=not args.no_font_match,
             font_dirs=args.font_dir,
+            print_items=args.print_items,
         )
     except Exception as exc:
         print(f"Error: {exc}")

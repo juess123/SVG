@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import time
 from pathlib import Path
 
 import numpy as np
@@ -15,6 +16,26 @@ from trace_to_svg import TRACE_PRESETS, trace_image_to_svg
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_GRAPH = SCRIPT_DIR / "data" / "graph" / "1.png"
 DEFAULT_TEXT = SCRIPT_DIR / "data" / "text" / "1.png"
+
+
+def format_duration(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, remaining = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{int(minutes)}m {remaining:.1f}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{int(hours)}h {int(minutes)}m {remaining:.1f}s"
+
+
+def run_timed(label: str, func, *args, **kwargs):
+    started = time.perf_counter()
+    print(f"[time] {label} started")
+    try:
+        return func(*args, **kwargs)
+    finally:
+        elapsed = time.perf_counter() - started
+        print(f"[time] {label} finished in {format_duration(elapsed)}")
 
 
 def default_flat_path(path: Path) -> Path:
@@ -55,16 +76,28 @@ def run_pipeline(args: argparse.Namespace) -> Path:
     text_svg = args.text_svg.resolve() if args.text_svg else text_input.with_suffix(".svg").resolve()
     output_svg = args.output.resolve()
 
-    flatten_graph(graph_input, flat_png, args)
-    trace_image_to_svg(
+    pipeline_started = time.perf_counter()
+    run_timed("SVG step 1/4 flatten graph", flatten_graph, graph_input, flat_png, args)
+    run_timed(
+        "SVG step 2/4 trace graph",
+        trace_image_to_svg,
         flat_png,
         graph_svg,
         trace_preset=args.trace,
         visible=args.visible,
         keep_document_open=args.keep_open,
     )
-    write_text_svg(text_input, text_svg, args.min_ocr_score, include_background=True)
-    merge_svgs(graph_svg, text_svg, output_svg, args.background)
+    run_timed(
+        "SVG step 3/4 OCR text",
+        write_text_svg,
+        text_input,
+        text_svg,
+        args.min_ocr_score,
+        include_background=True,
+        print_items=getattr(args, "print_ocr_items", False),
+    )
+    run_timed("SVG step 4/4 merge SVGs", merge_svgs, graph_svg, text_svg, output_svg, args.background)
+    print(f"[time] SVG pipeline total: {format_duration(time.perf_counter() - pipeline_started)}")
     return output_svg
 
 
@@ -81,6 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--visible", action="store_true", help="Show CorelDRAW while tracing.")
     parser.add_argument("--keep-open", action="store_true", help="Keep CorelDRAW document open after tracing.")
     parser.add_argument("--min-ocr-score", type=float, default=0.5)
+    parser.add_argument("--print-ocr-items", action="store_true", help="Print every recognized OCR text item.")
 
     parser.add_argument("--bilateral-diameter", type=int, default=9)
     parser.add_argument("--sigma-color", type=float, default=55.0)

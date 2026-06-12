@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 
 from api_split_image_layers import (
@@ -35,6 +36,26 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_INPUT_DIR = SCRIPT_DIR / "input"
 DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "output"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+
+
+def format_duration(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, remaining = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{int(minutes)}m {remaining:.1f}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{int(hours)}h {int(minutes)}m {remaining:.1f}s"
+
+
+def run_timed(label: str, func, *args, **kwargs):
+    started = time.perf_counter()
+    print(f"[time] {label} started")
+    try:
+        return func(*args, **kwargs)
+    finally:
+        elapsed = time.perf_counter() - started
+        print(f"[time] {label} finished in {format_duration(elapsed)}")
 
 
 def collect_images(input_dir: Path) -> list[Path]:
@@ -141,6 +162,7 @@ def build_svg_args(paths: dict[str, Path], args: argparse.Namespace) -> argparse
         bg_delta=args.bg_delta,
         white_l_threshold=args.white_l_threshold,
         min_component_area=args.min_component_area,
+        print_ocr_items=args.print_ocr_items,
     )
 
 
@@ -192,6 +214,7 @@ def relayout_with_gpt(source_image: Path, paths: dict[str, Path], args: argparse
 
 
 def process_image(source_image: Path, args: argparse.Namespace) -> Path | None:
+    image_started = time.perf_counter()
     paths = output_paths(source_image, args.output_dir.resolve())
     ensure_dirs(paths)
 
@@ -199,15 +222,16 @@ def process_image(source_image: Path, args: argparse.Namespace) -> Path | None:
     print(f"Project folder: {paths['root']}")
 
     if args.stage in {"all", "split"}:
-        split_with_gpt(source_image, paths, args)
+        run_timed(f"{source_image.name} step 1 split layers", split_with_gpt, source_image, paths, args)
 
     result: Path | None = None
     if args.stage in {"all", "svg"}:
-        result = build_svg(paths, args)
+        result = run_timed(f"{source_image.name} step 2 build SVG", build_svg, paths, args)
 
     if args.stage == "relayout" or (args.stage == "all" and not args.skip_relayout):
-        result = relayout_with_gpt(source_image, paths, args)
+        result = run_timed(f"{source_image.name} step 3 GPT relayout", relayout_with_gpt, source_image, paths, args)
 
+    print(f"[time] {source_image.name} total: {format_duration(time.perf_counter() - image_started)}")
     return result
 
 
@@ -243,6 +267,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--visible", action="store_true")
     parser.add_argument("--keep-open", action="store_true")
     parser.add_argument("--min-ocr-score", type=float, default=0.5)
+    parser.add_argument("--print-ocr-items", action="store_true", help="Print every recognized OCR text item.")
 
     parser.add_argument("--bilateral-diameter", type=int, default=9)
     parser.add_argument("--sigma-color", type=float, default=55.0)
@@ -287,6 +312,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    program_started = time.perf_counter()
     args = build_parser().parse_args()
     args.output_dir = args.output_dir.resolve()
 
@@ -315,10 +341,13 @@ def main() -> int:
             print("Failures:", file=sys.stderr)
             for image, reason in failed:
                 print(f"  {image.name}: {reason}", file=sys.stderr)
+            print(f"[time] Program total: {format_duration(time.perf_counter() - program_started)}")
             return 1
+        print(f"[time] Program total: {format_duration(time.perf_counter() - program_started)}")
         return 0
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
+        print(f"[time] Program total: {format_duration(time.perf_counter() - program_started)}")
         return 1
 
 

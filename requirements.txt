@@ -5,3 +5,7 @@ opencv-python>=4.13
 rapidocr-onnxruntime>=1.4
 paddleocr>=3.6
 openai>=1.66.0
+fastapi>=0.115
+uvicorn[standard]>=0.30
+requests>=2.32
+cos-python-sdk-v5>=1.9
