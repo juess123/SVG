@@ -1,0 +1,16 @@
+python flatten_gradients.py image10.png -o image10_flat.png
+python svg_vectorize.py image10_flat.png -o image10.svg
+python flatten_gradients.py image10.png -o image10_flat.png --bg-exclude-dist 18 --min-classify-ratio 0.001 --tolerance 18 --min-component-area 5
+python trace_to_svg.py -i image10_flat.png -o image10_flat.svg
+python flatten_gradients.py data\image10.png -o data\image10_flat.png --bg-exclude-dist 18 --min-classify-ratio 0.001 --tolerance 22 --min-component-area 5
+python flatten_gradients.py data\image10.png -o data\image10_flat.png
+python trace_to_svg.py -i data\image10_flat.png -o data\image10_flat.svg
+venv\Scripts\python.exe graph_text_pipeline.py --graph data\graph\1.png --text data\text\1.png -o data\merged_1.svg
+venv\Scripts\python.exe run_batch_pipeline.py //总流程
+venv\Scripts\python.exe run_batch_pipeline.py -i input\image14.png //单个图片的流程
+
+
+
+
+findfont
+deepfont

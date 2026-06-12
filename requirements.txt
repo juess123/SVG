@@ -1,0 +1,6 @@
+numpy>=1.26
+Pillow>=10.0
+pywin32>=306
+opencv-python>=4.13
+rapidocr-onnxruntime>=1.4
+paddleocr>=3.6
